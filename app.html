@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image {display_idx}/{total}</title>
+    <style>
+        body {{ font-family: Arial, sans-serif; text-align: center; margin: 0; }}
+        img  {{ max-width: 100%; height: auto; }}
+        nav  {{ margin: 20px; }}
+        a    {{ margin: 0 10px; text-decoration: none; color: #0077cc; }}
+        .ints {{ font-size: 1rem; margin: 10px 0 20px; color: #444; }}
+    </style>
+</head>
+<body>
+    <h1>Image {display_idx} / {total}</h1>
+    <img src="{img_data_uri}" alt="image {display_idx}" />
+    <div class="ints">{int_list}</div>
+    <nav>
+        <a href="/?idx={prev_idx}">⟵ Previous</a>
+        |
+        <a href="/?idx={next_idx}">Next ⟶</a>
+    </nav>
+</body>
+</html>

@@ -5,21 +5,172 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Image {display_idx}/{total}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; text-align: center; margin: 0; }}
-        img  {{ max-width: 100%; height: auto; }}
-        nav  {{ margin: 20px; }}
+        html, body {{ height:100%; margin:0; overflow:hidden; font-family: Arial, sans-serif; }}
+        body {{ display:flex; flex-direction:column; align-items:center; }}
+        h1 {{ margin: 8px 0; text-align:center; }}
+        nav  {{ margin: 12px; }}
         a    {{ margin: 0 10px; text-decoration: none; color: #0077cc; }}
-        .ints {{ font-size: 1rem; margin: 10px 0 20px; color: #444; }}
+        .ints {{ display: none; }}
+
+        /* --- viewport acts as fixed frame --- */
+        #viewport {{
+            position: relative;
+            width: 90vw;
+            height: 80vh;
+            overflow: hidden;
+            border: 1px solid #888;
+            background:#111;
+        }}
+
+        /* --- zoomable layer --- */
+        #imgWrapper {{
+            position: absolute;
+            top:0; left:0;
+            transform-origin: 0 0;
+            cursor: grab;
+            transition: transform 0.02s linear;
+        }}
+        #imgWrapper.dragging {{ cursor: grabbing; }}
+        #mainImg {{ display:block; user-select:none; pointer-events:none; }}
+        #bboxCanvas {{ position:absolute; top:0; left:0; pointer-events:none; }}
+
+        .controls {{ margin: 10px; }}
+        button {{ padding: 6px 14px; font-size: 0.9rem; margin: 0 8px; }}
     </style>
 </head>
 <body>
     <h1>Image {display_idx} / {total}</h1>
-    <img src="{img_data_uri}" alt="image {display_idx}" />
-    <div class="ints">{int_list}</div>
+
+    <div id="viewport">
+        <div id="imgWrapper">
+            <img id="mainImg" src="{img_data_uri}" alt="image {display_idx}" />
+            <canvas id="bboxCanvas"></canvas>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button id="toggleBtn">Hide boxes</button>
+        <button id="resetBtn">Reset view</button>
+    </div>
+
+    <div class="ints" id="bboxList">{int_list}</div>
+
     <nav>
         <a href="/?idx={prev_idx}">⟵ Previous</a>
         |
         <a href="/?idx={next_idx}">Next ⟶</a>
     </nav>
+
+    <script>
+        (function() {{
+            /* ----- parse bounding boxes ----- */
+            const raw = document.getElementById('bboxList').textContent.trim().replace(/'/g,'"');
+            const boxes = raw ? JSON.parse(raw) : [];
+
+            /* ----- elements ----- */
+            const viewport  = document.getElementById('viewport');
+            const wrapper   = document.getElementById('imgWrapper');
+            const img       = document.getElementById('mainImg');
+            const canvas    = document.getElementById('bboxCanvas');
+            const ctx       = canvas.getContext('2d');
+            const toggleBtn = document.getElementById('toggleBtn');
+            const resetBtn  = document.getElementById('resetBtn');
+
+            /* ----- state ----- */
+            let showBoxes = true;
+            let scale = 1;
+            let panX = 0;
+            let panY = 0;
+            const MIN_SCALE = 0.2;
+            const MAX_SCALE = 10;
+
+            /* ----- helpers ----- */
+            function fitScale() {{
+                const maxW = viewport.clientWidth;
+                const maxH = viewport.clientHeight;
+                return Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+            }}
+
+            function applyTransform() {{
+                wrapper.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + scale + ')';
+                if (showBoxes) {{ drawBoxes(); }}
+            }}
+
+            function drawBoxes() {{
+                canvas.width  = img.clientWidth;
+                canvas.height = img.clientHeight;
+
+                const sx = img.clientWidth  / img.naturalWidth;
+                const sy = img.clientHeight / img.naturalHeight;
+
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                ctx.strokeStyle = 'red';
+                ctx.lineWidth   = 2 / scale;
+
+                boxes.forEach(function(b) {{
+                    ctx.strokeRect(b[0]*sx, b[1]*sy, (b[2]-b[0])*sx, (b[3]-b[1])*sy);
+                }});
+            }}
+
+            /* ----- UI actions ----- */
+            toggleBtn.onclick = function() {{
+                showBoxes = !showBoxes;
+                canvas.style.display = showBoxes ? 'block' : 'none';
+                toggleBtn.textContent = showBoxes ? 'Hide boxes' : 'Show boxes';
+            }};
+            resetBtn.onclick = resetView;
+
+            /* ----- zoom (wheel on viewport) ----- */
+            viewport.addEventListener('wheel', function(e) {{
+                e.preventDefault();
+                const rect = viewport.getBoundingClientRect();
+                const px = e.clientX - rect.left; // pointer inside viewport
+                const py = e.clientY - rect.top;
+
+                const imgX = (px - panX) / scale;
+                const imgY = (py - panY) / scale;
+
+                const zoomFactor = Math.pow(1.2, -e.deltaY / 100);
+                let newScale = scale * zoomFactor;
+                newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, newScale));
+                const k = newScale / scale;
+
+                panX -= imgX * (k - 1) * scale;
+                panY -= imgY * (k - 1) * scale;
+
+                scale = newScale;
+                applyTransform();
+            }}, {{ passive:false }});
+
+            /* ----- pan (drag on viewport) ----- */
+            let dragging=false, startX=0, startY=0;
+            viewport.addEventListener('mousedown', function(e) {{
+                dragging=true;
+                startX = e.clientX - panX;
+                startY = e.clientY - panY;
+                wrapper.classList.add('dragging');
+            }});
+            window.addEventListener('mousemove', function(e) {{
+                if(!dragging) return;
+                panX = e.clientX - startX;
+                panY = e.clientY - startY;
+                applyTransform();
+            }});
+            window.addEventListener('mouseup', function() {{
+                dragging=false;
+                wrapper.classList.remove('dragging');
+            }});
+
+            /* ----- init ----- */
+            function resetView() {{
+                scale = fitScale();
+                panX = 0;
+                panY = 0;
+                applyTransform();
+            }}
+            if(img.complete) {{ resetView(); }} else {{ img.onload = resetView; }}
+            window.addEventListener('resize', resetView);
+        }})();
+    </script>
 </body>
 </html>

@@ -6,7 +6,7 @@
     <title>Image {display_idx}/{total}</title>
     <style>
         html,body {{ height:100%; margin:0; overflow:hidden; font-family:Arial, sans-serif; }}
-        body       {{ display:flex; flex-direction:column; align-items:center; }}
+        body       {{ display:flex; flex-direction:column; align-items:center; background:#000; color:#fff; }}
         h1         {{ margin:8px 0; text-align:center; }}
         nav        {{ margin:12px; }}
         a          {{ margin:0 10px; text-decoration:none; color:#0077cc; }}
@@ -18,7 +18,12 @@
         #bboxCanvas{{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }}
 
         .controls  {{ margin:10px; }}
-        button     {{ padding:6px 14px; font-size:0.9rem; margin:0 8px; }}
+        button     {{ padding:6px 14px; font-size:0.9rem; margin:0 8px; cursor:pointer; }}
+
+        /* legend */
+        #legend         {{ display:flex; flex-wrap:wrap; justify-content:center; margin:6px 0 12px; gap:6px 12px; font-size:0.8rem; }}
+        .legend-item    {{ display:flex; align-items:center; }}
+        .legend-swatch  {{ width:12px; height:12px; border-radius:2px; margin-right:6px; flex:none; }}
     </style>
 </head>
 <body>
@@ -35,6 +40,8 @@
         <button id="toggleBtn">Hide boxes</button>
         <button id="resetBtn">Reset view</button>
     </div>
+
+    <div id="legend"></div>
 
     <div class="ints" id="bboxList">{int_list}</div>
 
@@ -57,6 +64,7 @@
             const ctx       = canvas.getContext('2d');
             const toggleBtn = document.getElementById('toggleBtn');
             const resetBtn  = document.getElementById('resetBtn');
+            const legendDiv = document.getElementById('legend');
 
             /* ---------- state ---------- */
             let showBoxes = true;
@@ -65,27 +73,95 @@
             let minScale = 0;                    // will be set at resetView()
             const MAX_SCALE = 10;
 
-            /* ---------- helpers ---------- */
-            function fitScale() {{
-                const maxW = viewport.clientWidth;
-                const maxH = viewport.clientHeight;
-                return Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+            /* dropdown state */
+            let activeSelect = null;
+
+            /* ---------- colour helpers ---------- */
+            const classColors = {{}}; // cache
+            function stringToColor(str) {{
+                let hash = 0;
+                for (let i=0;i<str.length;i++) {{ hash = str.charCodeAt(i) + ((hash << 5) - hash); }}
+                const hue = Math.abs(hash) % 360;
+                return `hsl(${{hue}}, 100%, 50%)`;
+            }}
+            const getColor = cls => classColors[cls] || (classColors[cls] = stringToColor(cls));
+
+            /* ---------- legend ---------- */
+            function buildLegend() {{
+                legendDiv.innerHTML = "";
+                [...new Set(boxes.map(b=>b[4]||""))].filter(Boolean).forEach(cls=>{{
+                    const item=document.createElement('div'); item.className='legend-item';
+                    const sw=document.createElement('span'); sw.className='legend-swatch'; sw.style.background=getColor(cls); item.appendChild(sw);
+                    const lab=document.createElement('span'); lab.textContent=cls; item.appendChild(lab);
+                    legendDiv.appendChild(item);
+                }});
             }}
 
-            function applyTransform() {{
-                wrapper.style.transform = `translate3d(${{panX}}px,${{panY}}px,0) scale(${{scale}})`;
-            }}
-
+            /* ---------- drawing ---------- */
+            const fitScale = () => Math.min(viewport.clientWidth/img.naturalWidth, viewport.clientHeight/img.naturalHeight, 1);
+            const applyTransform = () => {{ wrapper.style.transform = `translate3d(${{panX}}px,${{panY}}px,0) scale(${{scale}})`; }};
             function drawBoxes() {{
-                if (!showBoxes) return;
-                canvas.width  = img.clientWidth;
-                canvas.height = img.clientHeight;
-                const sx = img.clientWidth  / img.naturalWidth;
-                const sy = img.clientHeight / img.naturalHeight;
+                if(!showBoxes) return;
+                canvas.width = img.clientWidth; canvas.height = img.clientHeight;
+                const sx = img.clientWidth / img.naturalWidth, sy = img.clientHeight / img.naturalHeight;
                 ctx.clearRect(0,0,canvas.width,canvas.height);
-                ctx.strokeStyle = 'red';
-                ctx.lineWidth   = 2 / scale;
-                boxes.forEach(b => ctx.strokeRect(b[0]*sx, b[1]*sy, (b[2]-b[0])*sx, (b[3]-b[1])*sy));
+                ctx.lineWidth = 2 / scale;
+                boxes.forEach(([x1,y1,x2,y2,cls=""])=>{{
+                    ctx.strokeStyle = getColor(cls);
+                    ctx.strokeRect(x1*sx, y1*sy, (x2-x1)*sx, (y2-y1)*sy);
+                }});
+            }}
+
+            /* ---------- dropdown helpers ---------- */
+            function removeActiveSelect() {{
+                if(activeSelect && activeSelect.parentNode) activeSelect.parentNode.removeChild(activeSelect);
+                activeSelect = null;
+            }}
+
+            function showClassSelect(screenX, screenY, currentCls, cb) {{
+                removeActiveSelect();
+                const unique = [...new Set(boxes.map(b=>b[4]||""))].filter(Boolean);
+                const sel = document.createElement('select'); activeSelect = sel;
+                sel.style.position='fixed'; sel.style.left=screenX+'px'; sel.style.top=screenY+'px'; sel.style.zIndex=10000;
+                unique.forEach(cls=>{{
+                    const opt=document.createElement('option'); opt.value=cls; opt.textContent=cls; sel.appendChild(opt);
+                }});
+                const createOpt=document.createElement('option'); createOpt.value='__other__'; createOpt.textContent='Create Class'; sel.appendChild(createOpt);
+                sel.value=currentCls;
+                document.body.appendChild(sel);
+                sel.focus();
+                // auto-open dropdown
+                setTimeout(()=> sel.click(), 0);
+
+                const cleanup = () => removeActiveSelect();
+                sel.addEventListener('change', ()=>{{
+                    if(sel.value==='__other__'){{
+                        const nv = prompt('Enter new class', currentCls);
+                        if(nv && nv.trim()) cb(nv.trim());
+                    }} else cb(sel.value);
+                    cleanup();
+                }});
+                sel.addEventListener('blur', cleanup);
+            }}
+
+            /* ---------- click handling ---------- */
+            function handleClick(e) {{
+                if(!showBoxes) return;
+                const rect = viewport.getBoundingClientRect();
+                const px = e.clientX - rect.left, py = e.clientY - rect.top;
+                const ix = (px - panX) / scale, iy = (py - panY) / scale;
+                let clicked = false;
+                for(let i=0;i<boxes.length;i++){{
+                    const [x1,y1,x2,y2,cls=""] = boxes[i];
+                    if(ix>=x1 && ix<=x2 && iy>=y1 && iy<=y2){{
+                        const cx=(x1+x2)/2, cy=(y1+y2)/2;
+                        if(Math.abs(ix-cx) > (x2-x1)*0.4 || Math.abs(iy-cy) > (y2-y1)*0.4) continue; // 40% tolerance
+                        clicked = true;
+                        showClassSelect(e.clientX, e.clientY, cls, newCls=>{{ boxes[i][4]=newCls; buildLegend(); drawBoxes(); }});
+                        break;
+                    }}
+                }}
+                if(!clicked) removeActiveSelect();
             }}
 
             /* ---------- UI actions ---------- */
@@ -93,58 +169,35 @@
                 showBoxes = !showBoxes;
                 canvas.style.display = showBoxes ? 'block' : 'none';
                 toggleBtn.textContent = showBoxes ? 'Hide boxes' : 'Show boxes';
-                if (showBoxes) drawBoxes();
+                if(showBoxes) drawBoxes();
             }};
             resetBtn.onclick = resetView;
+            viewport.addEventListener('click', handleClick);
 
             /* ---------- zoom ---------- */
             viewport.addEventListener('wheel', e => {{
                 e.preventDefault();
                 const rect = viewport.getBoundingClientRect();
-                const px   = e.clientX - rect.left;
-                const py   = e.clientY - rect.top;
-                const imgX = (px - panX) / scale;
-                const imgY = (py - panY) / scale;
-                let newScale = scale * Math.pow(1.2, -e.deltaY / 100);
+                const px = e.clientX - rect.left, py = e.clientY - rect.top;
+                const imgX = (px - panX) / scale, imgY = (py - panY) / scale;
+                let newScale = scale * Math.pow(1.2, -e.deltaY/100);
                 newScale = Math.max(minScale, Math.min(MAX_SCALE, newScale));
-                const k = newScale / scale;
-                panX -= imgX * (k - 1) * scale;
-                panY -= imgY * (k - 1) * scale;
-                scale = newScale;
-                applyTransform();
-                drawBoxes();
+                const k = newScale/scale;
+                panX -= imgX*(k-1)*scale; panY -= imgY*(k-1)*scale; scale = newScale;
+                applyTransform(); drawBoxes();
             }}, {{ passive:false }});
 
-            /* ---------- simple panning on viewport ---------- */
-            let dragging = false, startX = 0, startY = 0;
-            viewport.addEventListener('pointerdown', e => {{
-                dragging = true;
-                startX = e.clientX - panX;
-                startY = e.clientY - panY;
-                e.preventDefault();
-            }});
-            viewport.addEventListener('pointermove', e => {{
-                if (!dragging) return;
-                panX = e.clientX - startX;
-                panY = e.clientY - startY;
-                applyTransform();
-                e.preventDefault();
-            }});
-            window.addEventListener('pointerup', () => {{ dragging = false; }});
+            /* ---------- panning ---------- */
+            let dragging=false, startX=0, startY=0;
+            viewport.addEventListener('pointerdown', e=>{{ dragging=true; startX=e.clientX-panX; startY=e.clientY-panY; removeActiveSelect(); e.preventDefault(); }});
+            viewport.addEventListener('pointermove', e=>{{ if(!dragging) return; panX=e.clientX-startX; panY=e.clientY-startY; applyTransform(); e.preventDefault(); }});
+            window.addEventListener('pointerup', () => {{ dragging=false; }});
 
-            /* ---------- misc ---------- */
-            img.addEventListener('dragstart', e => e.preventDefault()); // stop ghost drag
-
-            function resetView() {{
-                const fit = fitScale();
-                scale = fit;
-                minScale = fit * 0.5;            // allow zooming out to half of fit scale
-                panX = panY = 0;
-                applyTransform();
-                drawBoxes();
-            }}
-            if (img.complete) resetView(); else img.onload = resetView;
+            /* ---------- init ---------- */
+            function resetView() {{ scale = fitScale(); minScale = scale*0.5; panX = panY = 0; applyTransform(); drawBoxes(); }}
+            if(img.complete) resetView(); else img.onload = resetView;
             window.addEventListener('resize', resetView);
+            buildLegend();
         }})();
     </script>
 </body>

@@ -11,7 +11,9 @@ uvicorn app:app --host 127.0.0.1 --port 8001
 - add zoom and panning
 - make faster (if possible)
 - add edits
-
-# to-do
 - show counts
 - export
+
+# to-do
+- add timestamps
+- fix image path when saving

@@ -9,6 +9,12 @@ from starlette.applications import Starlette
 from starlette.responses import HTMLResponse
 from starlette.routing import Route
 
+# ─── top of file ───
+import csv                     # NEW
+from datetime import datetime   # optional timestamp
+
+
+
 """Image visualizer – now uses an **external HTML template** (`app.html`).
 
 How it works
@@ -45,6 +51,11 @@ Run:
 # ---------------------------------------------------------------------------
 # 💾 Configure your image paths & metadata
 # ---------------------------------------------------------------------------
+ANNOT_CSV = Path(__file__).with_name("annotations.csv")
+CSV_HEADERS = [
+    "timestamp", "image_idx", "left", "top", "right", "bottom", "class"
+]
+
 IMAGES: List[str] = [
     "/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/assembled_image_img_1_1609.125_1817.0.png",
     "/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/assembled_image_img_1_2699.125_464.0.png",
@@ -114,7 +125,38 @@ async def homepage(request):
     )
     return HTMLResponse(html)
 
+async def save_annotations(request):
+    """
+    Expects JSON:
+    {
+        "image_idx": 0,
+        "boxes": [[x1,y1,x2,y2,"class"], ...]
+    }
+    Appends one CSV row per box.
+    """
+    data = await request.json()
+    image_idx = data.get("image_idx")
+    boxes = data.get("boxes", [])
+
+    # create file with header if it doesn't exist
+    new_file = not ANNOT_CSV.exists()
+    with ANNOT_CSV.open("a", newline="") as f:
+        writer = csv.writer(f)
+        if new_file:
+            writer.writerow(CSV_HEADERS)
+
+        ts = datetime.utcnow().isoformat()
+        for x1, y1, x2, y2, cls in boxes:
+            writer.writerow([ts, image_idx, x1, y1, x2, y2, cls])
+
+    return HTMLResponse("OK", status_code=200)
+
 # ---------------------------------------------------------------------------
 # 🏁 Starlette application
 # ---------------------------------------------------------------------------
-app = Starlette(routes=[Route("/", homepage)])
+routes = [
+    Route("/", homepage),
+    Route("/export", save_annotations, methods=["POST"]),  # NEW
+]
+
+app = Starlette(routes=routes)

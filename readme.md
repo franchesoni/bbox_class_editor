@@ -1,7 +1,7 @@
 # run with
 add your paths to images and annotations in `app.py` and run
 ```
-uvicorn image_viewer:app --host 127.0.0.1 --port 8001
+uvicorn app:app --host 127.0.0.1 --port 8001
 ```
 
 # done

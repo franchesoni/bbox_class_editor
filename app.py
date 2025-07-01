@@ -39,7 +39,7 @@ Example snippet for CSS braces in app.html:
 ```
 
 Run:
-    uvicorn image_viewer:app --host 127.0.0.1 --port 8001
+    uvicorn app:app --host 127.0.0.1 --port 8001
 """
 
 # ---------------------------------------------------------------------------

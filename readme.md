@@ -13,7 +13,8 @@ uvicorn app:app --host 127.0.0.1 --port 8001
 - add edits
 - show counts
 - export
-
-# to-do
 - add timestamps
 - fix image path when saving
+
+# to-do
+- save all annotations at once

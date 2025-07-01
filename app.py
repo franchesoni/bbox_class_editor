@@ -53,7 +53,7 @@ Run:
 # ---------------------------------------------------------------------------
 ANNOT_CSV = Path(__file__).with_name("annotations.csv")
 CSV_HEADERS = [
-    "timestamp", "image_idx", "left", "top", "right", "bottom", "class"
+    "timestamp", "image_path", "left", "top", "right", "bottom", "class"
 ]
 
 IMAGES: List[str] = [
@@ -125,6 +125,7 @@ async def homepage(request):
     )
     return HTMLResponse(html)
 
+
 async def save_annotations(request):
     """
     Expects JSON:
@@ -133,14 +134,21 @@ async def save_annotations(request):
         "boxes": [[x1,y1,x2,y2,"class", timestamp], ...]
     }
     Appends one CSV row per box, using the provided timestamp (converted to ISO8601 UTC).
+    Now saves image path instead of image index.
     """
     data = await request.json()
     image_idx = data.get("image_idx")
     boxes = data.get("boxes", [])
 
+    # Get image path from index (with fallback)
+    try:
+        image_path = IMAGES[image_idx]
+    except Exception:
+        image_path = str(image_idx)
+
     # create file with header if it doesn't exist
     new_file = not ANNOT_CSV.exists()
-    with ANNOT_CSV.open("a", newline="") as f:
+    with ANNOT_CSV.open("w", newline="") as f:
         writer = csv.writer(f)
         if new_file:
             writer.writerow(CSV_HEADERS)
@@ -149,12 +157,10 @@ async def save_annotations(request):
             # Accept both old and new format for backward compatibility
             if len(box) == 7:
                 ts, x1, y1, x2, y2, cls = box[5], box[0], box[1], box[2], box[3], box[4]
-                # Actually, new format is [x1, y1, x2, y2, cls, timestamp]
                 ts = box[5]
             elif len(box) == 6:
                 x1, y1, x2, y2, cls, ts = box
             else:
-                # fallback: no timestamp, use server time
                 x1, y1, x2, y2, cls = box[:5]
                 ts = datetime.utcnow().timestamp() * 1000
             # Convert ms timestamp to ISO8601 UTC
@@ -162,7 +168,7 @@ async def save_annotations(request):
                 ts_iso = datetime.utcfromtimestamp(float(ts)/1000).isoformat()
             except Exception:
                 ts_iso = datetime.utcnow().isoformat()
-            writer.writerow([ts_iso, image_idx, x1, y1, x2, y2, cls])
+            writer.writerow([ts_iso, image_path, x1, y1, x2, y2, cls])
 
     return HTMLResponse("OK", status_code=200)
 

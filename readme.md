@@ -15,6 +15,6 @@ uvicorn app:app --host 127.0.0.1 --port 8001
 - export
 - add timestamps
 - fix image path when saving
+- save annotations when going to a new image
 
 # to-do
-- save all annotations at once

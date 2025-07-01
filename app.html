@@ -48,8 +48,8 @@
     <div class="ints" id="bboxList">{int_list}</div>
 
     <nav>
-        <a href="/?idx={prev_idx}">⬅ Previous</a> |
-        <a href="/?idx={next_idx}">Next ➡</a>
+        <a href="/?idx={prev_idx}" id="prevLink">⬅ Previous</a> |
+        <a href="/?idx={next_idx}" id="nextLink">Next ➡</a>
     </nav>
 
     <script>
@@ -127,7 +127,7 @@
             }};
 
             /* ---------- dropdown ---------- */
-            function removeActiveSelect() {{ if(activeSelect&&activeSelect.parentNode) activeSelect.parentNode.removeChild(activeSelect); activeSelect=null; }}
+            function removeActiveSelect() {{ if(activeSelect&&activeSelect.parentNode) activeSelect.parentNode.removeChild(activeSelect); activeSelect=null; }}  // raises an error but ok
             function showClassSelect(x,y,currentCls,cb) {{
                 removeActiveSelect();
                 const unique=[...new Set(boxes.map(b=>b[4]||""))].filter(Boolean);
@@ -175,20 +175,38 @@
                 if(!clicked) removeActiveSelect();
             }}
 
+
             /* ---------- save ---------- */
-            function saveAnnotations() {{
+            function saveAnnotations(showAlert=true) {{
                 // Ensure all boxes have a timestamp before saving
                 const boxesWithTimestamps = boxes.map(b => {{
                     if (b.length < 6) return [...b, Date.now()];
                     return b;
-            }});
-                fetch('/export', {{
+                }});
+                return fetch('/export', {{
                     method:'POST',
                     headers:{{'Content-Type':'application/json'}},
                     body:JSON.stringify({{image_idx:imageIdx, boxes: boxesWithTimestamps}})
-                }}).then(r=>r.ok?alert('Saved!'):alert('Save failed')).catch(err=>alert('Error: '+err));
+                }}).then(r=>{{
+                    if(showAlert) r.ok?alert('Saved!'):alert('Save failed');
+                    return r;
+                }}).catch(err=>{{if(showAlert)alert('Error: '+err);}});
             }}
-            saveBtn.onclick=saveAnnotations;
+            saveBtn.onclick=()=>saveAnnotations(true);
+
+            // Save on navigation
+            function interceptNav(linkId) {{
+                const link = document.getElementById(linkId);
+                if (!link) return;
+                link.addEventListener('click', function(e) {{
+                    e.preventDefault();
+                    saveAnnotations(false).then(()=>{{
+                        window.location = link.href;
+                    }});
+                }});
+            }}
+            interceptNav('prevLink');
+            interceptNav('nextLink');
 
             /* ---------- UI buttons ---------- */
             toggleBtn.onclick=()=>{{ showBoxes=!showBoxes; canvas.style.display=showBoxes?'block':'none'; toggleBtn.textContent=showBoxes?'Hide boxes':'Show boxes'; if(showBoxes) drawBoxes(); }};

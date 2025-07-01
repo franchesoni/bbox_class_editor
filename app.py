@@ -130,9 +130,9 @@ async def save_annotations(request):
     Expects JSON:
     {
         "image_idx": 0,
-        "boxes": [[x1,y1,x2,y2,"class"], ...]
+        "boxes": [[x1,y1,x2,y2,"class", timestamp], ...]
     }
-    Appends one CSV row per box.
+    Appends one CSV row per box, using the provided timestamp (converted to ISO8601 UTC).
     """
     data = await request.json()
     image_idx = data.get("image_idx")
@@ -145,9 +145,24 @@ async def save_annotations(request):
         if new_file:
             writer.writerow(CSV_HEADERS)
 
-        ts = datetime.utcnow().isoformat()
-        for x1, y1, x2, y2, cls in boxes:
-            writer.writerow([ts, image_idx, x1, y1, x2, y2, cls])
+        for box in boxes:
+            # Accept both old and new format for backward compatibility
+            if len(box) == 7:
+                ts, x1, y1, x2, y2, cls = box[5], box[0], box[1], box[2], box[3], box[4]
+                # Actually, new format is [x1, y1, x2, y2, cls, timestamp]
+                ts = box[5]
+            elif len(box) == 6:
+                x1, y1, x2, y2, cls, ts = box
+            else:
+                # fallback: no timestamp, use server time
+                x1, y1, x2, y2, cls = box[:5]
+                ts = datetime.utcnow().timestamp() * 1000
+            # Convert ms timestamp to ISO8601 UTC
+            try:
+                ts_iso = datetime.utcfromtimestamp(float(ts)/1000).isoformat()
+            except Exception:
+                ts_iso = datetime.utcnow().isoformat()
+            writer.writerow([ts_iso, image_idx, x1, y1, x2, y2, cls])
 
     return HTMLResponse("OK", status_code=200)
 

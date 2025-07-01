@@ -57,7 +57,14 @@
             const imageIdx = {display_idx};
             /* ---------- data ---------- */
             const boxData = document.getElementById('bboxList').textContent.trim().replace(/'/g,'"');
-            const boxes   = boxData ? JSON.parse(boxData) : [];
+            // Add timestamp to each box if not present
+            const boxes = boxData ? JSON.parse(boxData).map(b => {{
+                if (b.length < 6) {{
+                    // If no timestamp, add current time
+                    return [...b, Date.now()];
+                }}
+                return b;
+        }}) : [];
 
             /* ---------- elements ---------- */
             const viewport  = document.getElementById('viewport');
@@ -134,7 +141,11 @@
                 setTimeout(()=>sel.dispatchEvent(new MouseEvent('mousedown',{{bubbles:true}})),0);
                 const cleanup=()=>removeActiveSelect();
                 sel.addEventListener('change',()=>{{
-                    if(sel.value==='__other__'){{const nv=prompt('Enter new class',currentCls); if(nv&&nv.trim()) cb(nv.trim());}} else cb(sel.value);
+                    const updateTimestamp = () => Date.now();
+                    if(sel.value==='__other__'){{
+                        const nv=prompt('Enter new class',currentCls);
+                        if(nv&&nv.trim()) cb(nv.trim(), updateTimestamp());
+                    }} else cb(sel.value, updateTimestamp());
                     cleanup();
                 }});
                 sel.addEventListener('blur',cleanup);
@@ -153,7 +164,11 @@
                         const cx=(x1+x2)/2, cy=(y1+y2)/2;
                         if(Math.abs(ix-cx)>(x2-x1)*0.4||Math.abs(iy-cy)>(y2-y1)*0.4) continue;
                         clicked=true;
-                        showClassSelect(e.clientX,e.clientY,cls,newCls=>{{ boxes[i][4]=newCls; buildLegend(); drawBoxes(); }});
+                        showClassSelect(e.clientX,e.clientY,cls,(newCls, ts)=>{{
+                            boxes[i][4]=newCls;
+                            boxes[i][5]=ts || Date.now(); // update timestamp
+                            buildLegend(); drawBoxes();
+                        }});
                         break;
                     }}
                 }}
@@ -162,10 +177,15 @@
 
             /* ---------- save ---------- */
             function saveAnnotations() {{
+                // Ensure all boxes have a timestamp before saving
+                const boxesWithTimestamps = boxes.map(b => {{
+                    if (b.length < 6) return [...b, Date.now()];
+                    return b;
+            }});
                 fetch('/export', {{
                     method:'POST',
                     headers:{{'Content-Type':'application/json'}},
-                    body:JSON.stringify({{image_idx:imageIdx, boxes}})
+                    body:JSON.stringify({{image_idx:imageIdx, boxes: boxesWithTimestamps}})
                 }}).then(r=>r.ok?alert('Saved!'):alert('Save failed')).catch(err=>alert('Error: '+err));
             }}
             saveBtn.onclick=saveAnnotations;

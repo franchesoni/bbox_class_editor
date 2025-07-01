@@ -51,7 +51,7 @@ Run:
 # ---------------------------------------------------------------------------
 # 💾 Configure your image paths & metadata
 # ---------------------------------------------------------------------------
-ANNOT_CSV = Path(__file__).with_name("annotations.csv")
+ANNOT_CSV = Path(__file__)
 CSV_HEADERS = [
     "timestamp", "image_path", "left", "top", "right", "bottom", "class"
 ]
@@ -147,11 +147,9 @@ async def save_annotations(request):
         image_path = str(image_idx)
 
     # create file with header if it doesn't exist
-    new_file = not ANNOT_CSV.exists()
-    with ANNOT_CSV.open("w", newline="") as f:
+    with ANNOT_CSV.with_name(f"annotations_img{image_idx}.csv").open("w", newline="") as f:
         writer = csv.writer(f)
-        if new_file:
-            writer.writerow(CSV_HEADERS)
+        writer.writerow(CSV_HEADERS)
 
         for box in boxes:
             # Accept both old and new format for backward compatibility

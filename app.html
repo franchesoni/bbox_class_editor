@@ -21,9 +21,10 @@
         button     {{ padding:6px 14px; font-size:0.9rem; margin:0 8px; cursor:pointer; }}
 
         /* legend */
-        #legend         {{ display:flex; flex-wrap:wrap; justify-content:center; margin:6px 0 12px; gap:6px 12px; font-size:0.8rem; }}
-        .legend-item    {{ display:flex; align-items:center; }}
-        .legend-swatch  {{ width:12px; height:12px; border-radius:2px; margin-right:6px; flex:none; }}
+        #legend         {{ display:flex; flex-direction:column; align-items:flex-start; margin:6px 0 12px; gap:4px; font-size:0.8rem; }}
+        .legend-item    {{ display:flex; align-items:center; gap:6px; }}
+        .legend-swatch  {{ width:12px; height:12px; border-radius:2px; flex:none; }}
+        .legend-chk     {{ cursor:pointer; }}
     </style>
 </head>
 <body>
@@ -73,8 +74,9 @@
             let minScale = 0;                    // will be set at resetView()
             const MAX_SCALE = 10;
 
-            /* dropdown state */
+            /* dropdown & legend state */
             let activeSelect = null;
+            const selectedClasses = {{}}; // class -> boolean
 
             /* ---------- colour helpers ---------- */
             const classColors = {{}}; // cache
@@ -89,12 +91,23 @@
             /* ---------- legend ---------- */
             function buildLegend() {{
                 legendDiv.innerHTML = "";
-                [...new Set(boxes.map(b=>b[4]||""))].filter(Boolean).forEach(cls=>{{
+                const counts={{}};
+                boxes.forEach(b=>{{ const c=b[4]||""; if(c) counts[c]=(counts[c]||0)+1; }});
+                const entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+                // initialise selection map
+                entries.forEach(([cls])=>{{ if(selectedClasses[cls]===undefined) selectedClasses[cls]=cls.toLowerCase()==='other'?false:true; }});
+                const totalSel=entries.reduce((s,[cls,count])=> selectedClasses[cls]? s+count : s ,0);
+                entries.forEach(([cls,count])=>{{
                     const item=document.createElement('div'); item.className='legend-item';
+                    const chk=document.createElement('input'); chk.type='checkbox'; chk.className='legend-chk'; chk.checked=selectedClasses[cls];
+                    chk.onchange=()=>{{ selectedClasses[cls]=chk.checked; buildLegend(); }};
+                    item.appendChild(chk);
                     const sw=document.createElement('span'); sw.className='legend-swatch'; sw.style.background=getColor(cls); item.appendChild(sw);
-                    const lab=document.createElement('span'); lab.textContent=cls; item.appendChild(lab);
+                    const pct= totalSel? ((count/totalSel)*100).toFixed(1):'0.0';
+                    const lab=document.createElement('span'); lab.textContent=`${{cls}} ( ${{count}}, ${{pct}}% )`; item.appendChild(lab);
                     legendDiv.appendChild(item);
                 }});
+                if(entries.length===0) legendDiv.textContent="No classes";
             }}
 
             /* ---------- drawing ---------- */
@@ -130,8 +143,7 @@
                 sel.value=currentCls;
                 document.body.appendChild(sel);
                 sel.focus();
-                // auto-open dropdown
-                setTimeout(()=> sel.click(), 0);
+                setTimeout(()=> sel.dispatchEvent(new MouseEvent('mousedown', {{ bubbles:true }})), 0);
 
                 const cleanup = () => removeActiveSelect();
                 sel.addEventListener('change', ()=>{{
@@ -155,7 +167,7 @@
                     const [x1,y1,x2,y2,cls=""] = boxes[i];
                     if(ix>=x1 && ix<=x2 && iy>=y1 && iy<=y2){{
                         const cx=(x1+x2)/2, cy=(y1+y2)/2;
-                        if(Math.abs(ix-cx) > (x2-x1)*0.4 || Math.abs(iy-cy) > (y2-y1)*0.4) continue; // 40% tolerance
+                        if(Math.abs(ix-cx) > (x2-x1)*0.4 || Math.abs(iy-cy) > (y2-y1)*0.4) continue;
                         clicked = true;
                         showClassSelect(e.clientX, e.clientY, cls, newCls=>{{ boxes[i][4]=newCls; buildLegend(); drawBoxes(); }});
                         break;
@@ -194,10 +206,16 @@
             window.addEventListener('pointerup', () => {{ dragging=false; }});
 
             /* ---------- init ---------- */
-            function resetView() {{ scale = fitScale(); minScale = scale*0.5; panX = panY = 0; applyTransform(); drawBoxes(); }}
-            if(img.complete) resetView(); else img.onload = resetView;
+            function resetView() {{
+                scale = fitScale();
+                minScale = scale*0.5;
+                panX = panY = 0;
+                applyTransform();
+                drawBoxes();
+                buildLegend();
+            }}
+            if (img.complete) resetView(); else img.onload = resetView;
             window.addEventListener('resize', resetView);
-            buildLegend();
         }})();
     </script>
 </body>

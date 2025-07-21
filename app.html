@@ -101,7 +101,7 @@
                 entries.forEach(([cls,count])=>{{
                     const item=document.createElement('div'); item.className='legend-item';
                     const chk=document.createElement('input'); chk.type='checkbox'; chk.className='legend-chk'; chk.checked=selectedClasses[cls];
-                    chk.onchange=()=>{{ selectedClasses[cls]=chk.checked; buildLegend(); }};
+                    chk.onchange=()=>{{ selectedClasses[cls]=chk.checked; buildLegend(); draw(); }};
                     item.appendChild(chk);
                     const sw=document.createElement('span'); sw.className='legend-swatch'; sw.style.background=getColor(cls); item.appendChild(sw);
                     const pct=totalSel?((count/totalSel)*100).toFixed(1):'0.0';
@@ -130,6 +130,7 @@
               // boxes in image coords → no extra scaling math
               ctx.lineWidth = 2/scale;
               boxes.forEach(([x1,y1,x2,y2,cls=''])=>{{
+		if (!selectedClasses[cls]) return;
                 ctx.strokeStyle = getColor(cls);
                 ctx.strokeRect(x1,y1,x2-x1,y2-y1);
               }});
@@ -177,7 +178,7 @@
                         showClassSelect(e.clientX,e.clientY,cls,(newCls, ts)=>{{
                             boxes[i][4]=newCls;
                             boxes[i][5]=ts || Date.now(); // update timestamp
-                            buildLegend(); drawBoxes();
+                            buildLegend(); draw();
                         }});
                         break;
                     }}
@@ -244,7 +245,7 @@
 
             /* ---------- init ---------- */
             function resetView() {{
-                scale=fitScale(); minScale=scale*0.5; panX=panY=0; draw(); buildLegend();
+                scale=fitScale(); minScale=scale*0.5; panX=panY=0; buildLegend(); draw();
             }}
             if(img.complete) resetView(); else img.onload=resetView;
             window.addEventListener('resize',resetView);

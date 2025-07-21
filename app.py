@@ -79,7 +79,8 @@ class BasicAuth(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # 💾 Configure your image paths & metadata
 # ---------------------------------------------------------------------------
-ANNOT_CSV = Path(__file__)
+ANNOT_CSV = Path("annotations")
+ANNOT_CSV.mkdir(parents=True, exist_ok=True)
 CSV_HEADERS = [
     "timestamp", "image_path", "left", "top", "right", "bottom", "class"
 ]
@@ -176,7 +177,7 @@ async def save_annotations(request):
 
     # create file with header if it doesn't exist
     Path("annotations").mkdir(parents=True, exist_ok=True)
-    with ANNOT_CSV.with_name(f"annotations/annotations_img{image_idx}.csv").open("w", newline="") as f:
+    with (ANNOT_CSV / f"annotations_img{image_idx}.csv").open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(CSV_HEADERS)
 

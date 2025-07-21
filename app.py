@@ -124,6 +124,7 @@ def _encode_image(path: str) -> str:
     img = Image.open(Path(path)).convert("RGB")
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=85)
+    print("Returning image at", path)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 # Locate template next to this script

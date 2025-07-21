@@ -86,9 +86,23 @@
             const selectedClasses = {{}};
 
             /* ---------- color helpers ---------- */
+	    const palette = ['#0000ff',  // shiny blue
+		             '#00ff00',  // green
+		             '#ffff00',  // yellow
+		             '#ff0000',  // red
+		             '#000000',  // black
+		             '#ff00ff',  // violet
+		             '#00ffff',  // cyan ?
+		             ]
+	    let nextColorIdx = 0;
             const classColors = {{}};
-            const stringToColor = str => {{ let h=0; for(let i=0;i<str.length;i++) h=str.charCodeAt(i)+((h<<5)-h); return `hsl(${{Math.abs(h)%360}},100%,50%)`; }};
-            const getColor = cls => classColors[cls] || (classColors[cls]=stringToColor(cls));
+	    const getColor = cls => {{
+		    if (!classColors[cls]) {{
+			    classColors[cls] = palette[nextColorIdx % palette.length];
+			    nextColorIdx++;
+		    }}
+		    return classColors[cls];
+	    }};
 
             /* ---------- legend ---------- */
             function buildLegend() {{

@@ -98,7 +98,7 @@ def load_bboxes(json_path: str) -> List[int]:
     return converted
 
 
-pred_folder = Path("/home/franchesoni/pitie_data/predictions/")
+pred_folder = Path("/home/franchesoni/pitie_data/selected_predictions/")
 IMAGES, INT_LISTS = [], []
 for subdir in os.listdir(pred_folder):
     image = list((pred_folder / subdir).glob("assembled_image_img*.png"))
@@ -107,6 +107,8 @@ for subdir in os.listdir(pred_folder):
         image, bboxes = image[0], bboxes[0]  # select first element
         IMAGES.append(image)
         INT_LISTS.append(load_bboxes(bboxes))
+    else:
+        print("image skipped:", image)
 
 
 # Sanity checks

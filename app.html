@@ -16,6 +16,7 @@
         #imgWrapper{{ position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }}
         #mainImg   {{ display:block; user-select:none; pointer-events:none; }}
         #bboxCanvas{{ position:absolute; inset:0; width:100%; height:100%; pointer-events:none; }}
+        #imgCanvas {{ position:absolute; inset:0; width:100%; height:100%; }}
 
         .controls  {{ margin:10px; display:flex; flex-wrap:wrap; gap:8px; justify-content:center; }}
         button     {{ padding:6px 14px; font-size:0.9rem; cursor:pointer; }}
@@ -31,10 +32,8 @@
     <h1>Image {display_idx} / {total}</h1>
 
     <div id="viewport">
-        <div id="imgWrapper">
-            <img id="mainImg" src="{img_data_uri}" alt="image {display_idx}" />
-            <canvas id="bboxCanvas"></canvas>
-        </div>
+        <img id="mainImg" src="{img_data_uri}" alt="img {display_idx}" style="display:none">
+        <canvas id="imgCanvas"></canvas>   <!-- one canvas drives everything -->
     </div>
 
     <div class="controls">
@@ -68,9 +67,8 @@
 
             /* ---------- elements ---------- */
             const viewport  = document.getElementById('viewport');
-            const wrapper   = document.getElementById('imgWrapper');
             const img       = document.getElementById('mainImg');
-            const canvas    = document.getElementById('bboxCanvas');
+            const canvas    = document.getElementById('imgCanvas');
             const ctx       = canvas.getContext('2d');
             const toggleBtn = document.getElementById('toggleBtn');
             const resetBtn  = document.getElementById('resetBtn');
@@ -116,15 +114,27 @@
 
             /* ---------- drawing ---------- */
             const fitScale = () => Math.min(viewport.clientWidth/img.naturalWidth, viewport.clientHeight/img.naturalHeight,1);
-            const applyTransform = () => wrapper.style.transform=`translate3d(${{panX}}px,${{panY}}px,0) scale(${{scale}})`;
-            const drawBoxes = () => {{
-                if(!showBoxes) return;
-                canvas.width=img.clientWidth; canvas.height=img.clientHeight;
-                const sx=img.clientWidth/img.naturalWidth, sy=img.clientHeight/img.naturalHeight;
-                ctx.clearRect(0,0,canvas.width,canvas.height);
-                ctx.lineWidth=2/scale;
-                boxes.forEach(([x1,y1,x2,y2,cls=""])=>{{ ctx.strokeStyle=getColor(cls); ctx.strokeRect(x1*sx,y1*sy,(x2-x1)*sx,(y2-y1)*sy); }});
-            }};
+            // ---------------- master draw (canvas) ----------------
+            function draw(){{
+              canvas.width  = viewport.clientWidth;
+              canvas.height = viewport.clientHeight;
+              ctx.setTransform(1,0,0,1,0,0);           // reset
+              ctx.clearRect(0,0,canvas.width,canvas.height);
+
+              // pan/zoom exactly like App‑2
+              ctx.setTransform(scale,0,0,scale,panX,panY);
+              ctx.drawImage(img,0,0);                  // full‑res image
+
+              if (!showBoxes) return;
+
+              // boxes in image coords → no extra scaling math
+              ctx.lineWidth = 2/scale;
+              boxes.forEach(([x1,y1,x2,y2,cls=''])=>{{
+                ctx.strokeStyle = getColor(cls);
+                ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+              }});
+            }}
+            const applyTransform = draw;
 
             /* ---------- dropdown ---------- */
             function removeActiveSelect() {{ if(activeSelect&&activeSelect.parentNode) activeSelect.parentNode.removeChild(activeSelect); activeSelect=null; }}  // raises an error but ok
@@ -209,7 +219,7 @@
             interceptNav('nextLink');
 
             /* ---------- UI buttons ---------- */
-            toggleBtn.onclick=()=>{{ showBoxes=!showBoxes; canvas.style.display=showBoxes?'block':'none'; toggleBtn.textContent=showBoxes?'Hide boxes':'Show boxes'; if(showBoxes) drawBoxes(); }};
+            toggleBtn.onclick=()=>{{ showBoxes=!showBoxes; toggleBtn.textContent=showBoxes?'Hide boxes':'Show boxes'; draw(); }};
             resetBtn.onclick=resetView;
             viewport.addEventListener('click',handleClick);
 
@@ -223,7 +233,7 @@
                 newScale=Math.max(minScale,Math.min(MAX_SCALE,newScale));
                 const k=newScale/scale;
                 panX-=imgX*(k-1)*scale; panY-=imgY*(k-1)*scale; scale=newScale;
-                applyTransform(); drawBoxes();
+                draw();
             }},{{passive:false}});
 
             /* ---------- panning ---------- */
@@ -234,7 +244,7 @@
 
             /* ---------- init ---------- */
             function resetView() {{
-                scale=fitScale(); minScale=scale*0.5; panX=panY=0; applyTransform(); drawBoxes(); buildLegend();
+                scale=fitScale(); minScale=scale*0.5; panX=panY=0; draw(); buildLegend();
             }}
             if(img.complete) resetView(); else img.onload=resetView;
             window.addEventListener('resize',resetView);
@@ -242,3 +252,6 @@
     </script>
 </body>
 </html>
+
+
+

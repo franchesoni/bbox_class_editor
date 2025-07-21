@@ -1,10 +1,12 @@
 from pathlib import Path
+import os
 import json
 import base64
 import io
 from typing import List
 
 from PIL import Image
+Image.MAX_IMAGE_PIXELS = 10_000_000_000
 from starlette.applications import Starlette
 from starlette.responses import HTMLResponse
 from starlette.routing import Route
@@ -47,6 +49,32 @@ Example snippet for CSS braces in app.html:
 Run:
     uvicorn app:app --host 127.0.0.1 --port 8001
 """
+# ---------------------------------------------------------------------------
+# SECURITY
+# ---------------------------------------------------------------------------
+# ─── basic‑auth middleware ───
+import secrets, base64
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import PlainTextResponse
+USERNAME, PASSWORD = "karim", "waldenstrom"
+
+class BasicAuth(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        hdr = request.headers.get("authorization", "")
+        if not hdr.startswith("Basic "):
+            return PlainTextResponse("Auth required", 401,
+                                     headers={"WWW-Authenticate": "Basic"})
+        try:
+            user, pwd = base64.b64decode(hdr[6:]).decode().split(":", 1)
+        except Exception:
+            return PlainTextResponse("Bad header", 400)
+        if not (secrets.compare_digest(user, USERNAME) and
+                secrets.compare_digest(pwd, PASSWORD)):
+            return PlainTextResponse("Unauthorized", 401,
+                                     headers={"WWW-Authenticate": "Basic"})
+        return await call_next(request)
+
+
 
 # ---------------------------------------------------------------------------
 # 💾 Configure your image paths & metadata
@@ -55,12 +83,6 @@ ANNOT_CSV = Path(__file__)
 CSV_HEADERS = [
     "timestamp", "image_path", "left", "top", "right", "bottom", "class"
 ]
-
-IMAGES: List[str] = [
-    "/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/assembled_image_img_1_1609.125_1817.0.png",
-    "/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/assembled_image_img_1_2699.125_464.0.png",
-]
-
 
 def load_bboxes(json_path: str) -> List[int]:
     """Load bounding boxes from a JSON file and map class id -> name."""
@@ -74,11 +96,17 @@ def load_bboxes(json_path: str) -> List[int]:
         converted.append(bbox)
     return converted
 
-# Example metadata per image
-INT_LISTS: List[List[int]] = [
-    load_bboxes("/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/bboxes_labels_1_1609.125_1817.0.json"),
-    load_bboxes("/home/franchesoni/mine/repos/annotation_apps/bbox_class_editor/data/bboxes_labels_1_2699.125_464.0.json"),
-]
+
+pred_folder = Path("/home/franchesoni/pitie_data/predictions/")
+IMAGES, INT_LISTS = [], []
+for subdir in os.listdir(pred_folder):
+    image = list((pred_folder / subdir).glob("assembled_image_img*.png"))
+    bboxes = list((pred_folder / subdir).glob("bboxes_labels*.json"))
+    if (len(image) >= 1) and (len(bboxes) == 1):
+        image, bboxes = image[0], bboxes[0]  # select first element
+        IMAGES.append(image)
+        INT_LISTS.append(load_bboxes(bboxes))
+
 
 # Sanity checks
 if not IMAGES:
@@ -147,7 +175,8 @@ async def save_annotations(request):
         image_path = str(image_idx)
 
     # create file with header if it doesn't exist
-    with ANNOT_CSV.with_name(f"annotations_img{image_idx}.csv").open("w", newline="") as f:
+    Path("annotations").mkdir(parents=True, exist_ok=True)
+    with ANNOT_CSV.with_name(f"annotations/annotations_img{image_idx}.csv").open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(CSV_HEADERS)
 
@@ -173,9 +202,11 @@ async def save_annotations(request):
 # ---------------------------------------------------------------------------
 # 🏁 Starlette application
 # ---------------------------------------------------------------------------
+from starlette.middleware import Middleware
+
 routes = [
     Route("/", homepage),
     Route("/export", save_annotations, methods=["POST"]),  # NEW
 ]
 
-app = Starlette(routes=routes)
+app = Starlette(routes=routes, middleware=[Middleware(BasicAuth)])

@@ -1,7 +1,16 @@
 # run with
 add your paths to images and annotations in `app.py` and run
 ```
+# local
 uvicorn app:app --host 127.0.0.1 --port 8001
+
+# http
+uvicorn app:app --host 0.0.0.0 --port 8018 --reload
+
+# https
+uvicorn app:app --host 0.0.0.0 --port 8018 --reload --ssl-keyfile key.pem --ssl-certfile cert.pem
+
+
 ```
 
 # done

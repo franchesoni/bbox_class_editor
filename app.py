@@ -56,7 +56,7 @@ Run:
 import secrets, base64
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import PlainTextResponse
-USERNAME, PASSWORD = "karim", "waldenstrom"
+USERNAME, PASSWORD = "maloum", "waldenstrom"
 
 class BasicAuth(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
